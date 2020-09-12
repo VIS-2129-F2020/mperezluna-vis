@@ -1,0 +1,279 @@
+---
+title: "Assignment 1"
+author: "Miguel Perez Luna"
+date: "9/10/2020"
+output: html_document
+---
+
+```{r load libraries, results = "hide", message = FALSE, warning = FALSE}
+library(ggplot2)
+library(tidyverse)
+library(tidycensus)
+```
+
+```{r load decennial variables}
+area_vars_2010 <- load_variables(2010, "sf1")
+```
+
+I chose my variables from the 2010 census. In particular, I will focus on census tracts in Larimer and Weld Counties, which make up the Northern Colorado metropolitan area. The six variables are:
+
+1. Whether the majority of households in the tract is rented or owned (maj_ten) (categorical)
+
+2. The majority race/ethnicity (majority_race) (categorical)
+
+3. The population of the tract (tot_pop) (continuous)
+
+4. The median age of residents (med_age) (continuous)
+
+5. The percent of households with children under 18 (pct_hh_children) (continuous)
+
+6. The percent of homes with single mothers householders (pct_sing_fe_hh_ch) (continuous)
+
+```{r, message = FALSE}
+Noco <- c("Weld","Larimer")
+
+vars <- c(own_children = "HCT002003",
+          tot_hh = "H001001",
+          tot_own_hh = "H004002",
+          tot_rent_hh = "H004004",
+          tot_pop = "P003001",
+          nh_white_pop = "P005003",
+          nh_black_pop = "P005004",
+          nh_asian_pop = "P005006",
+          hispanic_pop = "P005010",
+          fe_hh_child = "P038016",
+          med_age = "P013001")
+
+Noco_tracts <- get_decennial(geography = "tract", variables = vars, 
+                             state = "CO", county = Noco, 
+                             output = "wide") %>%
+ 
+   mutate(pct_hh_children = own_children / tot_hh,
+          pct_own_hh = tot_own_hh / tot_hh,
+          pct_rent_hh = tot_rent_hh / tot_hh,
+          pct_sing_fe_hh_ch = fe_hh_child / tot_hh,
+          maj_ten = case_when(
+            tot_own_hh / tot_hh > 0.5 ~ "owned",
+            tot_rent_hh / tot_hh > 0.5 ~ "rented",
+            TRUE ~ "none"),
+           majority_race = case_when(
+           nh_white_pop / tot_pop > 0.5 ~ "nh_white",
+           nh_black_pop / tot_pop > 0.5 ~ "nh_black",
+           nh_asian_pop / tot_pop > 0.5 ~ "nh_asian",
+           hispanic_pop / tot_pop > 0.5 ~ "hispanic",
+           (nh_white_pop + nh_black_pop + nh_asian_pop + hispanic_pop) /
+             tot_pop < 0.5 ~ "other",
+           TRUE ~ "None")) %>%
+
+filter(tot_hh > 0, tot_pop > 0, maj_ten != "none") %>%
+select(GEOID, maj_ten, majority_race, tot_pop, med_age, pct_hh_children, pct_sing_fe_hh_ch)
+```
+
+
+```{r}
+ggplot(Noco_tracts, aes(x = majority_race, fill = maj_ten)) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(name = "Percent of Tracts",
+                     breaks = seq(0, 1, by = 0.1),
+                     labels = paste(seq(0, 100, by = 10), "%", sep = "")) +
+  scale_x_discrete(name = "Majority race/ethnicity",
+                        labels = c("Hispanic",
+                                   "Non-Hispanic white",
+                                   "No majority")) +
+  scale_fill_discrete(name = element_blank(),
+                        labels = c("Majority of households owned",
+                                   "Majority of households rented")) +
+  theme_bw()
+```
+
+
+```{r}
+ggplot(Noco_tracts, 
+       aes(x = majority_race,
+           y = pct_sing_fe_hh_ch,
+           color = majority_race)) +
+  geom_boxplot() +
+  scale_x_discrete(name = "Majority race/ethnicity",
+                       labels = c("Hispanic",
+                                  "Non-Hispanic white",
+                                  "No majority")) +
+  scale_y_continuous(name = "Percent of single mother householders",
+                     breaks = seq(0, 1, by = 0.05),
+                     labels = paste(seq(0, 100, by = 5), "%", sep = "")) +
+  geom_point(position = "jitter",
+             size = 0.5,
+             alpha = 1) +  
+  theme_bw() +
+  theme(legend.position = "none")
+```
+
+
+```{r}
+ggplot(Noco_tracts, aes(x = maj_ten, fill = majority_race)) +
+  geom_bar(position = "fill") +
+  scale_y_continuous(name = "Percent of Tracts",
+                     breaks = seq(0, 1, by = 0.1),
+                     labels = paste(seq(0, 100, by = 10), "%", sep = "")) +
+  scale_x_discrete(name = "Majority of households owned or rented",
+                        labels = c("Owned",
+                                   "Rented")) +
+  scale_fill_discrete(name = element_blank(),
+                        labels = c("Hispanic",
+                                   "Non-hispanic white",
+                                   "No majority")) +
+  theme_bw()
+```
+
+
+```{r}
+ggplot(Noco_tracts, 
+       aes(x = tot_pop,
+           y = med_age,
+           color = majority_race)) +
+  geom_point() +
+  stat_smooth(method = "lm") +
+  scale_x_continuous(name = "Total Population") +
+  scale_y_continuous(name = "Median age within tract",
+                     breaks = seq(10, 80, by = 10)) +
+  scale_color_discrete(name = "Majority race/ethnicity",
+                       labels = c("Hispanic",
+                                  "Non-Hispanic white",
+                                  "No majority")) +
+  theme_bw() +
+  theme(legend.key.size = unit(0.1, "cm"))
+```
+
+```{r}
+ggplot(Noco_tracts,
+       aes(x = tot_pop)) + 
+          geom_histogram(binwidth = 500, color = "black", fill = "Green") +
+scale_x_continuous(name = "Total Population",
+                   breaks = seq(0, 12000, by = 1000)) +
+scale_y_continuous(name = "Number of Tracts",
+                  breaks = seq(0, 15, by = 1)) + 
+  theme_bw()
+```
+
+
+```{r}
+ggplot(Noco_tracts, 
+       aes(x = pct_hh_children,
+           y = pct_sing_fe_hh_ch,
+           color = majority_race,
+           fill = majority_race)) +
+  geom_point() +
+  stat_smooth(method = "lm") +
+  scale_x_continuous(name = "Percent of households with children under 18",
+                     breaks = seq(0, 1, by = 0.1),
+                     labels = paste(seq(0, 100, by = 10), "%", sep = "")) +
+  scale_y_continuous(name = "Percent of homes with single mothers householders",
+                     breaks = seq(0, 1, by = 0.1),
+                     labels = paste(seq(0, 100, by = 10), "%", sep = "")) +
+  scale_color_discrete(name = "Majority race/ethnicity",
+                       labels = c("Hispanic",
+                                  "Non-Hispanic white",
+                                  "No majority")) +
+  scale_fill_discrete(name = "Majority race/ethnicity",
+                       labels = c("Hispanic",
+                                  "Non-Hispanic white",
+                                  "No majority")) +
+  theme_classic()  
+```
+
+```{r}
+ggplot(Noco_tracts, 
+       aes(x = maj_ten,
+           y = pct_sing_fe_hh_ch,
+           color = maj_ten)) +
+  geom_point(position = "jitter",
+             size = 3,
+             alpha = 0.75) +
+  scale_x_discrete(name = "Majority race/ethnicity",
+                       labels = c("Non-Hispanic white",
+                                  "Hispanic",
+                                  "No majority")) +
+  scale_y_continuous(name = "Percent of homes with single mothers householders",
+                     breaks = seq(0, 1, by = 0.05),
+                     labels = paste(seq(0, 100, by = 5), "%", sep = "")) +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+
+
+```{r}
+ggplot(Noco_tracts, 
+       aes(x = maj_ten,
+           y = pct_hh_children,
+           color = maj_ten)) +
+  geom_point(position = "jitter",
+             size = 3,
+             alpha = 0.75) +
+  scale_x_discrete(name = "Majority race/ethnicity",
+                       labels = c("Non-Hispanic white",
+                                  "Hispanic",
+                                  "No majority")) +
+  scale_y_continuous(name = "Percent of homes with children under 18",
+                     breaks = seq(0, 1, by = 0.05),
+                     labels = paste(seq(0, 100, by = 5), "%", sep = "")) +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+
+
+```{r}
+ggplot(Noco_tracts, 
+       aes(x = med_age,
+           y = pct_hh_children,
+           color = majority_race,
+           fill = majority_race)) +
+  geom_point() +
+  stat_smooth(method = "lm") +
+  scale_x_continuous(name = "Median age within tract",
+                     breaks = seq(10, 60, by = 10)) +  
+  scale_y_continuous(name = "Percent of households with children under 18",
+                     breaks = seq(0, 1, by = 0.05),
+                     labels = paste(seq(0, 100, by = 5), "%", sep = "")) +
+  scale_color_discrete(name = "Majority race/ethnicity",
+                       labels = c("Hispanic",
+                                  "Non-Hispanic white",
+                                  "No majority")) +
+  scale_fill_discrete(name = "Majority race/ethnicity",
+                       labels = c("Hispanic",
+                                  "Non-Hispanic white",
+                                  "No majority")) +
+  theme_bw() +
+  theme(legend.key.size = unit(0.1, "cm"))
+```
+
+
+```{r}
+ggplot(Noco_tracts, 
+       aes(x = med_age,
+           y = tot_pop,
+           color = majority_race)) +
+  geom_point() +
+  stat_smooth(color = "black", linetype = 2, size = 0.5) +
+  scale_x_continuous(name = "Median age within tract") +
+  scale_y_continuous(name = "Tract population") +
+  scale_color_discrete(name = "Majority race/ethnicity",
+                       labels = c("Hispanic",
+                                  "Non-Hispanic white",
+                                  "No majority")) +
+  theme_bw()
+```
+
+
+```{r}
+ggplot(Noco_tracts, 
+       aes(x = tot_pop,
+           y = med_age)) +
+  geom_point(alpha = 1, size = 1) +
+  stat_smooth(color = "red", linetype = 2, size = 0.5) +
+  scale_x_continuous(name = "Tract Population",
+                     breaks = seq(0, 12000, by = 1000)) +
+  scale_y_continuous(name = "Median age within tract",
+                     breaks = seq(0, 80, by = 10)) +
+  coord_polar(theta = "x") +
+  theme_bw() 
+```
+
