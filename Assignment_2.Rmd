@@ -1,0 +1,139 @@
+---
+title: "Assignment 2"
+author: "Miguel Perez Luna"
+date: "9/18/2020"
+output: 
+  html_document: 
+  theme: yeti
+  toc: true
+  toc_depth: 3
+  toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+install.packages("rnaturalearthhires", repos = "https://github.com/ropensci/rnaturalearthhires", type = "source")
+```
+
+
+
+## Loading data
+
+I installed a few packages that were not installed on my computer (sf, rnaturalearth, ggspatial, carogram, and ggthemes). I also had to install rgeos.
+
+```{r, load libraries, results = "hide", message = FALSE, warning = FALSE}
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(tidyverse)
+library(ggspatial)
+library(cartogram)
+library(ggthemes)
+library(devtools)
+```
+
+### Mapping the Contiguous United States
+
+Here I'm plotting the lower 48 states.
+
+``` {r world map}
+lower_states <- ne_states(country = "United States of America", 
+                       returnclass = "sf") %>%
+  filter(name != "Alaska",
+         name != "Hawaii")
+
+US_map <- ggplot(lower_states) +
+  geom_sf() +
+  theme_bw()
+
+US_map
+```
+
+This same map can be projected with the US Albers Equal Area projection. 
+
+```{r}
+USA_AEA <- "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=23 +lon_0=-96 +x_0=0 +y_0=0 +ellps=clrk66 +units=m +no_defs"
+
+ggplot(lower_states) +
+  geom_sf() +
+  coord_sf(crs = USA_AEA) +
+  theme_bw()
+```
+
+
+
+#### The NAD83 Colorado North (ftUS) Projection
+
+I live in northern Colorado, so for my first projection I decided to use the NAD83 Colorado North (ftUS) projection from spatialreference.org. 
+
+```{r}
+CO_state_plane <- "+proj=lcc +lat_1=40.78333333333333 +lat_2=39.71666666666667 +lat_0=39.33333333333334 +lon_0=-105.5 +x_0=914401.8288036576 +y_0=304800.6096012192 +ellps=GRS80 +datum=NAD83 +to_meter=0.3048006096012192 +no_defs "
+
+ggplot(lower_states) +
+  geom_sf() +
+  coord_sf(crs = CO_state_plane) +
+  theme_bw()
+```
+
+#### The NAD83 Louisiana South (ftUS) Projection
+
+My two older brothers live in New Orleans, so for my second projection I decided to use the NAD83 Louisiana South (ftUS) projection from spatialreference.org. 
+
+```{r}
+LA_state_plane <- "+proj=lcc +lat_1=30.7 +lat_2=29.3 +lat_0=28.5 +lon_0=-91.33333333333333 +x_0=999999.9999898402 +y_0=0 +ellps=GRS80 +datum=NAD83 +to_meter=0.3048006096012192 +no_defs"
+
+ggplot(lower_states) +
+  geom_sf() +
+  coord_sf(crs = LA_state_plane) +
+  theme_bw()
+```
+
+
+#### The NAD83 Massachusetts Mainland (ftUS) Projection
+
+Lastly, I lived in Cambridge, MA for the last 9 years, so for my last projection I decided to use the NAD83 Massachusetts Mainland (ftUS) projection from spatialreference.org. 
+
+```{r}
+MA_state_plane <- "+proj=lcc +lat_1=42.68333333333333 +lat_2=41.71666666666667 +lat_0=41 +lon_0=-71.5 +x_0=200000.0001016002 +y_0=750000 +ellps=GRS80 +datum=NAD83 +to_meter=0.3048006096012192 +no_defs"
+
+ggplot(lower_states) +
+  geom_sf() +
+  coord_sf(crs = MA_state_plane) +
+  theme_bw()
+```
+
+
+### Transforming data to be stored in a projected coordinate system
+
+Transforming the map data to be stored in a projected coordinate system means that the coordinates are in distances like feet or meter rather than longitude and latitude. 
+
+```{r}
+transformed_states <- lower_states %>% st_transform(crs = USA_AEA)
+```
+
+### Representing State Population Estimates
+
+```{r}
+pop_estimates <- read.csv("nst-est2019-alldata.csv") %>% 
+  filter(STATE > 0)
+
+nineteen_pop_est <- transformed_states %>% 
+  left_join(pop_estimates, by = c("name" = "STATE_NAME")) %>%
+  filter(STATE > 0) %>%
+  select(STATE, STATE_NAME, POPESTIMATE2019)
+```
+
+
+
+
+
+
+
+
+
+
+
+
