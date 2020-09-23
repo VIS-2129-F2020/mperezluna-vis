@@ -2,20 +2,25 @@
 title: "Assignment 2"
 author: "Miguel Perez Luna"
 date: "9/18/2020"
-output: html_document
+output: 
+  html_document:
+    theme: cosmo
+    toc: true
+    toc_depth: 3
+    toc_float: true
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+```{r results = "hide", message = FALSE, warning = FALSE}
 install.packages("rnaturalearthhires", repos = "https://github.com/ropensci/rnaturalearthhires", type = "source")
 ```
 
 
 
-## Loading data
+# Loading data
 
 I installed a few packages that were not installed on my computer (sf, rnaturalearth, ggspatial, carogram, and ggthemes). I also had to install rgeos.
 
@@ -30,7 +35,7 @@ library(ggthemes)
 library(devtools)
 ```
 
-### Mapping the Contiguous United States
+## Mapping the Contiguous United States
 
 Here I'm plotting the lower 48 states.
 
@@ -60,7 +65,7 @@ ggplot(lower_states) +
 
 
 
-#### The NAD83 Colorado North (ftUS) Projection
+### The NAD83 Colorado North (ftUS) Projection
 
 I live in northern Colorado, so for my first projection I decided to use the NAD83 Colorado North (ftUS) projection from spatialreference.org. 
 
@@ -73,7 +78,7 @@ ggplot(lower_states) +
   theme_bw()
 ```
 
-#### The NAD83 Louisiana South (ftUS) Projection
+### The NAD83 Louisiana South (ftUS) Projection
 
 My two older brothers live in New Orleans, so for my second projection I decided to use the NAD83 Louisiana South (ftUS) projection from spatialreference.org. 
 
@@ -87,7 +92,7 @@ ggplot(lower_states) +
 ```
 
 
-#### The NAD83 Massachusetts Mainland (ftUS) Projection
+### The NAD83 Massachusetts Mainland (ftUS) Projection
 
 Lastly, I lived in Cambridge, MA for the last 9 years, so for my last projection I decided to use the NAD83 Massachusetts Mainland (ftUS) projection from spatialreference.org. 
 
@@ -101,7 +106,7 @@ ggplot(lower_states) +
 ```
 
 
-### Transforming data to be stored in a projected coordinate system
+## Transforming data to be stored in a projected coordinate system
 
 Transforming the map data to be stored in a projected coordinate system means that the coordinates are in distances like feet or meter rather than longitude and latitude. 
 
@@ -109,7 +114,7 @@ Transforming the map data to be stored in a projected coordinate system means th
 transformed_states <- lower_states %>% st_transform(crs = USA_AEA)
 ```
 
-### Representing State Population Estimates in 2019
+## Representing State Population Estimates in 2019
 
 I'm choosing to examine population estimates for each of the continguous states and the District of Columbia. I've downloaded [a file with state-level data on 2019 population estimates from the United States Census Bureau](https://www2.census.gov/programs-surveys/popest/datasets/2010-2019/national/totals/nst-est2019-alldata.csv){target="_blank"} that I joined to the `transformed_states` data set.
 
@@ -123,7 +128,7 @@ nineteen_pop_est <- transformed_states %>%
 ```
 
 
-#### Chloropleth Map
+### Chloropleth Map
 
 I can create a map of the United States that shows the population estimates for each state in 2019.
 
@@ -139,7 +144,7 @@ ggplot(nineteen_pop_est, aes(fill = POPESTIMATE2019)) +
   theme(legend.background = element_blank())
 ```
 
-#### Continuous Cartogram
+### Continuous Cartogram
 
 The continuous cartogram below not only shows the distribution of population estimates by color, but it also distorts the size of each state to reflect its proportion of the population. 
 
@@ -158,7 +163,7 @@ ggplot(nineteen_cartogram_cont, aes(fill = POPESTIMATE2019)) +
   theme(legend.background = element_blank())
 ```
 
-#### Proportional Symbol Map
+### Proportional Symbol Map
 
 Lastly, the proportional symbol will preserve the USA_AEA projection of the United States, but will show the estimated populations of each state proportionally with varying sizes of circles.
 
