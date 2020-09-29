@@ -1,0 +1,463 @@
+---
+title: "Assignment 3"
+author: "Miguel Perez Luna"
+date: "9/27/2020"
+output:
+   html_document:
+    theme: cosmo
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+I'll be using the following libraries. 
+
+```{r, message=FALSE}
+library(sf)
+library(tidyverse)
+library(ggthemes)
+library(ggspatial)
+library(units)
+library(nngeo)
+```
+
+## Loading the data from the Denver Open Data Catalog
+
+The Denver Open Data Catalog had KML files available for download. However, when I went to copy the link for each file, it had a KMZ ending. I learned that this was a zipped file and using st_read() wasn't working. So I downloaded each KMZ file, changed its .kmz ending to a .zip ending, and that let me extract the doc.kml file within the zipped file. Then, I used st_read() to open each KML file. 
+
+I selected the following layers:
+
+Point Layer A: Afterschool Programming Locations
+
+Point Layer B: Liquor License Locations
+
+Polygon Layer C: Denver Neighborhoods
+
+Polygon Layer D: Zoning Boundaries Permitting Farmers Markets
+
+The liquor license KML file had two, what I believe were, accidental locations (which showed up in the middle of the desert in Arizona). I removed those two observations from the data frame and that let me examine liquor licenses only within Denver city limits.
+
+```{r}
+
+nhoods <- st_read("denver_neighborhoods.kml", quiet = TRUE)
+
+farmersmarket <- st_read("farmers_market.kml", quiet = TRUE)
+
+afterschool <- st_read("afterschool.kml", quiet = TRUE)
+
+liquor <- st_read("liquor_licenses.kml", quiet = TRUE)
+
+liquorlic <- liquor[-c(1306, 1654),]
+
+```
+
+## Transforming the data
+
+I'll transform my data so that its spatial data is stored using a projected coordinate system. I'll use the NAD83 Colorado Central projection from spatialreference.org. 
+
+```{r}
+CO_state_plane <- "+proj=lcc +lat_1=39.75 +lat_2=38.45 +lat_0=37.83333333333334 +lon_0=-105.5 +x_0=914401.8289 +y_0=304800.6096 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs "
+
+nhoods <- nhoods %>%
+  st_transform(CO_state_plane)
+
+afterschool <- afterschool %>%
+  st_transform(CO_state_plane)
+
+farmersmarket <- farmersmarket %>%
+  st_transform(CO_state_plane)
+
+liquorlic <- liquorlic %>%
+  st_transform(CO_state_plane)
+
+```
+
+
+This is a map of the above data.
+
+```{r}
+ggplot(farmersmarket) +
+  geom_sf(fill = "orange", color = NA) +
+  geom_sf(data = liquorlic, color = "brown", size = 0.01) +
+  geom_sf(data = afterschool, size = 0.01) +
+  geom_sf(data= nhoods, fill = NA, color = "gray") +
+  theme_map() +
+  annotation_scale()
+```
+
+## The number and proportion of liquor licenses within 400 meters of an afterschool location. 
+
+First I'll create a 400 meter buffer around each after school location. 400 meters is about a quarter mile, which is about a 5 minute walk.
+
+```{r}
+afterschool_buffer <- st_buffer(afterschool, dist = 400) %>%
+  st_union()
+
+ggplot(afterschool_buffer) +
+  geom_sf() +
+  theme_map()
+```
+
+
+Next I'll subset the locations of liquor licenses within this buffer.
+
+```{r}
+liquorlic_afterschool <- liquorlic[afterschool_buffer,]
+  
+ggplot(afterschool_buffer) +
+  geom_sf() +
+  geom_sf(data = liquorlic_afterschool, 
+          color = "blue", 
+          size = 0.01) +
+  theme_map()
+```
+
+Here I'll join my two liquor license dataframes.
+```{r}
+liquorlic <- liquorlic %>%
+  st_join(liquorlic_afterschool) %>%
+  mutate(by_afterschool = !is.na(Name.y))
+```
+Now I can calculate how many liquor licenses are within 400 meters of an after school location.
+```{r}
+n_liquorlic_afterschool <- sum(liquorlic$by_afterschool)
+
+n_liquorlic_afterschool
+```
+I can calculate what percent this is of all liquor licenses. 
+```{r}
+n_liquorlic <- length(liquorlic$by_afterschool)
+
+pct_liquorlic_afterschool <- n_liquorlic_afterschool / n_liquorlic
+
+pct_liquorlic_afterschool
+```
+
+This means about 54 percent of all liquor license locations in Denver are within 400 meters of an after school location. 
+
+We can show this on a map. 
+
+```{r}
+left_side  <- st_bbox(liquorlic)$xmin
+top_side <- st_bbox(liquorlic)$ymax
+
+ggplot(nhoods) +
+  geom_sf(fill = "gray", color = NA) +
+  geom_sf(data = liquorlic, size = 0.01,
+          aes(color = by_afterschool)) +
+  scale_color_manual(values = c("lightblue", "darkblue"),
+          name = "Liquor license locations\nby distance to an after school location", 
+          labels = c("No liquor license within 100 m",
+                     "Liquor license within 100 m")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_minimal()) +
+  annotate(geom = "text", x = left_side, 
+           y = top_side, 
+           label = paste("Of the ", 
+                         prettyNum(n_liquorlic, big.mark = ","),
+                         " liquor license locations in Denver\n", 
+                         prettyNum(n_liquorlic_afterschool, big.mark = ","),
+                         " (", 
+                         prettyNum(100*pct_liquorlic_afterschool, digits = 0),
+                         "%) are within 400\nmeters of an after school location.",
+                         sep = ""),
+           hjust = 0, vjust = 0, size = 3) +
+  theme_map() +
+  theme(legend.position = "bottom", panel.background = element_rect(fill = "cornsilk1"),
+        legend.background = element_rect(fill = alpha("white", 1), 
+                                         color = "gray"))
+```
+
+
+## Number of after school locations in each neighborhood
+
+How many after school locations are in each Denver neighborhood? 
+
+The northeasternmost neighborhood only contains Denver International Airport, so there's no surprise that there are no after school locations there.
+
+```{r}
+nhoods <- nhoods %>%
+  mutate(num_afterschool = lengths(st_covers(nhoods, afterschool)))
+
+ggplot(nhoods) +
+  geom_sf(color = NA,
+          aes(fill = num_afterschool)) +
+  scale_fill_viridis_c(name = "Denver neighborhoods\nby number of afterschool locations",
+                       breaks = breaks <- seq(0, 40, by = 5),
+                       labels = paste(prettyNum(breaks, big.mark = ","),
+                                      "after school locations")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tl",
+                         style = north_arrow_minimal()) +
+
+theme_map() +
+  theme(legend.position = "right", legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+
+## Number of liquor licenses in each neighborhood
+
+How many liquor licenses are in each Denver neighborhood?
+
+```{r}
+nhoods <- nhoods %>%
+  mutate(num_liquorlic = lengths(st_covers(nhoods, liquorlic)))
+
+ggplot(nhoods) +
+  geom_sf(color = NA,
+          aes(fill = num_liquorlic)) +
+  scale_fill_viridis_c(name = "Denver neighborhoods\nby number of liquor licenses",
+                       breaks = breaks <- seq(0, 200, by = 25),
+                       labels = paste(prettyNum(breaks, big.mark = ","),
+                                      "liquor licenses")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tl",
+                         style = north_arrow_minimal()) +
+
+theme_map() +
+  theme(legend.position = "right", legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+
+
+## The density of liquor license locations in farmers market districts
+
+Admittedly, I wasn't sure how to adjust the scale so that the maximum density was displayed with the yellow. You can see that the density is slightly greater in the downtown Denver area.
+
+```{r}
+farmersmarket <- farmersmarket %>%
+  mutate(num_liquorlic = lengths(st_covers(farmersmarket, liquorlic)))
+
+farmersmarket <- farmersmarket %>%
+  mutate(area = set_units(st_area(farmersmarket), km^2)) %>%
+  mutate(liquorlic_dens = as.numeric(num_liquorlic / area))
+
+ggplot(farmersmarket) +
+  geom_sf(color = NA, 
+          aes(fill = liquorlic_dens)) +
+    scale_fill_viridis_c(name = 
+                           "Farmers market districts\nby liquor licenses",
+                       breaks = breaks <- seq(0, 2000, by = 250),
+                       labels = paste(prettyNum(breaks, big.mark = ","),
+                                      "liquor licenses per square km")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_minimal()) +
+theme_map() +
+  theme(legend.position = "right",
+    legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+
+
+## The average distance between an after school location and a liquor license
+
+To find the average distance from an after school program to a liquor license, first we find the distances of after school programs to their nearest liquor license.
+
+```{r, message=FALSE, results='hide'}
+afterschool <- afterschool %>%
+  mutate(liquorlic_dist = st_nn(afterschool, liquorlic, 
+                           returnDist = TRUE)$dist) %>%
+  mutate(liquorlic_dist = as.numeric(liquorlic_dist))
+```
+
+Then I can calculate the average distance from an after school program to the nearest liquor license. 
+
+```{r}
+avg_liquorlic_dist <- mean(afterschool$liquorlic_dist)
+
+avg_liquorlic_dist
+```
+
+I can make a map that represents how far each after school program is to a liquor license.
+
+```{r}
+right_side <- st_bbox(afterschool)$xmax
+left_side  <- st_bbox(afterschool)$xmin
+top_side <- st_bbox(afterschool)$ymax
+bottom_side <- st_bbox(afterschool)$ymin
+
+
+ggplot(nhoods) +
+  geom_sf(fill = "gray", color = NA) +
+  geom_sf(data = afterschool, size = 0.1,
+          aes(color = liquorlic_dist)) +
+  coord_sf(xlim = c(left_side, right_side), 
+           ylim = c(bottom_side, top_side), expand = FALSE) +
+  scale_color_viridis_c(name = 
+                          "Denver afterschool locations by distance\nto a liquor license") +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_minimal()) +
+  annotate(geom = "text", x = left_side + 300, 
+           y = bottom_side, 
+           label = paste("On average, a Denver after school location\nis ", 
+                         prettyNum(avg_liquorlic_dist, digits = 3),
+                         " meters from a liquor license.",
+                         sep = ""),
+           hjust = 0, vjust = 0, size = 3) +
+  theme_map() +
+  theme(legend.position = "right", panel.background = element_rect(fill = "cornsilk1"),
+        legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+
+## Farmers Market districts that overlap with Denver neighborhoods
+
+```{r}
+nhoods <- nhoods %>%
+  mutate(num_fmarket = lengths(st_overlaps(nhoods, farmersmarket))) %>%
+  mutate(has_fmarket = num_fmarket > 0)
+```
+
+How many neighborhoods overlap with farmers market districts?
+
+```{r}
+n_fmarket_nhoods <- sum(nhoods$has_fmarket)
+
+n_fmarket_nhoods
+```
+
+Again, the northeasternmost neighborhood only contains Denver International Airport, so it's not surprising that there is no zoned district allowing farmers markets within that neighborhood.
+
+```{r}
+left_side  <- st_bbox(farmersmarket)$xmin
+top_side <- st_bbox(farmersmarket)$ymax
+
+ggplot(nhoods) +
+  geom_sf(fill = "lightblue", color = NA) +
+  geom_sf(data = nhoods,
+          aes(fill = has_fmarket)) +
+  scale_fill_manual(values = c("cornsilk1", "darkseagreen1"),
+          name = "Denver Neighborhoods\nby presence of farmers market districts", 
+          labels = c("Neighborhood without\nan overlapping farmers market district",
+                     "Neighborhood with an\noverlapping farmers market district")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_minimal()) +
+  annotate(geom = "text", x = left_side, 
+           y = top_side+3000, 
+           label = paste(n_fmarket_nhoods ,
+                         "of Denver's", 
+                         length(nhoods$Name),
+                         "neighborhoods contain\nor overlap with", 
+                         "a farmers market district."),
+           hjust = 0, vjust = 0, size = 3) +
+  theme_map() +
+  theme(legend.position = "bottom",
+        panel.background = element_rect(fill = "gray"),
+        legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+
+## After school locations in Farmers Market Districts
+
+It's interesting to note the connections between after school locations and farmers market districts. Typically, farmers markets tend to pop up in areas with middle class or higher SES residents. After school programs can vary, typically appearing mostly in more affluent areas although also often in low-SES areas where programs like the YMCA or Boys and Girls Clubs are found. In any case, this analysis shows the farmers market districts in the downtown area containing higher number of afterschool locations (which might be explained simply by the area's density). The few bright spots in the northeast could reflect the growing wealth towards the northeast.
+
+```{r}
+farmersmarket <- farmersmarket %>%
+  mutate(num_afterschool = lengths(st_covers(farmersmarket, afterschool)))
+
+ggplot(farmersmarket) +
+  geom_sf(color = NA,
+          aes(fill = num_afterschool)) +
+  scale_fill_viridis_c(name = "Farmers market districts\nby number of after school locations",
+                       breaks = breaks <- seq(0, 8, by = 1),
+                       labels = paste(prettyNum(breaks, big.mark = ","),
+                                      "after school locations")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tl",
+                         style = north_arrow_minimal()) +
+
+theme_map() +
+  theme(legend.position = "right", legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+
+## Liquor license locations in Farmers Market Districts
+
+I'm not sure that this map offers anything compelling, but it further highlights that Downtown Denver contains a high concentration of liquor licenses. 
+
+```{r}
+farmersmarket <- farmersmarket %>%
+  mutate(num_liquorlic = lengths(st_covers(farmersmarket, liquorlic)))
+
+ggplot(farmersmarket) +
+  geom_sf(color = NA,
+          aes(fill = num_liquorlic)) +
+  scale_fill_viridis_c(name = "Farmers market districts\nby number of liquor license locations",
+                       breaks = breaks <- seq(0, 150, by = 25),
+                       labels = paste(prettyNum(breaks, big.mark = ","),
+                                      "liquor licenses")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tl",
+                         style = north_arrow_minimal()) +
+
+theme_map() +
+  theme(legend.position = "right", legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+
+
+## Density of after school locations by Denver neighborhood
+
+My last two maps compare the densities of after school programs and liquor licenses per neighborhood. 
+
+```{r}
+nhoods <- nhoods %>%
+  mutate(num_afterschool = lengths(st_covers(nhoods, afterschool)))
+
+nhoods <- nhoods %>%
+  mutate(area = set_units(st_area(nhoods), km^2)) %>%
+  mutate(afterschool_dens = as.numeric(num_afterschool / area))
+
+ggplot(nhoods) +
+  geom_sf(color = NA, 
+          aes(fill = afterschool_dens)) +
+    scale_fill_viridis_c(name = 
+                           "Denver neighborhoods\nby afterschool location density",
+                       breaks = breaks <- seq(0, 10, by = 2),
+                       labels = paste(prettyNum(breaks, big.mark = ","),
+                                      "after school locations per square km")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tl",
+                         style = north_arrow_minimal()) +
+theme_map() +
+  theme(legend.position = "right",
+    legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+
+## Density of liquor licenses by Denver neighborhood
+
+```{r}
+nhoods <- nhoods %>%
+  mutate(num_liquorlic = lengths(st_covers(nhoods, liquorlic)))
+
+nhoods <- nhoods %>%
+  mutate(area = set_units(st_area(nhoods), km^2)) %>%
+  mutate(liquorlic_dens = as.numeric(num_liquorlic / area))
+
+ggplot(nhoods) +
+  geom_sf(color = NA, 
+          aes(fill = liquorlic_dens)) +
+    scale_fill_viridis_c(name = 
+                           "Denver neighborhoods\nby liquor license density",
+                       breaks = breaks <- seq(0, 200, by = 25),
+                       labels = paste(prettyNum(breaks, big.mark = ","),
+                                      "after school locations per square km")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tl",
+                         style = north_arrow_minimal()) +
+theme_map() +
+  theme(legend.position = "right",
+    legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+
+
