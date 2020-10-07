@@ -1,0 +1,47 @@
+---
+title: "Assignment 4"
+author: "Miguel Perez Luna"
+date: "10/3/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+library(osmdata)
+library(opentripplanner)
+library(tidyverse)
+library(sf)
+library(ggthemes)
+library(ggspatial)
+```
+
+
+
+```{r}
+GRLY_schools <- st_read("https://opendata.arcgis.com/datasets/fec1a4755e7f454389dcd18e183c8e08_0.kml?geometry=%7B%22xmin%22%3A-104.982%2C%22ymin%22%3A40.365%2C%22xmax%22%3A-104.551%2C%22ymax%22%3A40.456%2C%22type%22%3A%22extent%22%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D&outSR=%7B%22latestWkid%22%3A4326%2C%22wkid%22%3A4326%7D")
+```
+
+## Getting Street Data
+
+```{r}
+opq(bbox = 'Greeley CO USA') %>%
+  add_osm_feature(key = 'highway') %>%
+  osmdata_xml(file = 'OTP/Graphs/Default/Greeley_streets.osm')
+```
+
+Plotting features on a map with NAD83(HARN): Colorado North projection.
+
+```{r}
+CO_state_plane <- "+proj=lcc +lat_1=40.78333333333333 +lat_2=39.71666666666667 +lat_0=39.33333333333334 +lon_0=-105.5 +x_0=914401.8289 +y_0=304800.6096 +ellps=GRS80 +units=m +no_defs "
+
+greeley_street_features <- opq(bbox = 'Greeley CO USA') %>%
+  add_osm_feature(key = 'highway') %>%
+  osmdata_sf()
+
+greeley_streets <- greeley_street_features$osm_lines %>%
+  st_transform(crs = CO_state_plane)
+```
+

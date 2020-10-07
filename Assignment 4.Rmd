@@ -1,0 +1,203 @@
+---
+title: "Assignment 4"
+author: "Miguel Perez Luna"
+date: "10/3/2020"
+output:
+   html_document:
+    theme: cosmo
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+library(osmdata)
+library(opentripplanner)
+library(tidyverse)
+library(sf)
+library(ggthemes)
+library(ggspatial)
+library(wesanderson)
+library(ggplot2)
+```
+
+## Load Locations
+  
+I started this project by importing a KML file from the Colorado Department of Public Health, which actually shows the locations of all schools in the state of Colorado. I was able to zoom in on the map to focus on just nine schools in Greeley/Evans, all that are close to my home.
+
+```{r}
+GRLY_schools <- st_read("https://opendata.arcgis.com/datasets/fec1a4755e7f454389dcd18e183c8e08_0.kml?geometry=%7B%22xmin%22%3A-104.782%2C%22ymin%22%3A40.375%2C%22xmax%22%3A-104.665%2C%22ymax%22%3A40.398%2C%22type%22%3A%22extent%22%2C%22spatialReference%22%3A%7B%22wkid%22%3A4326%7D%7D&outSR=%7B%22latestWkid%22%3A4326%2C%22wkid%22%3A4326%7D")
+```
+
+## Getting Street Data
+
+Next I added the OTP directory to my .gitignore file.
+
+```{r}
+opq(bbox = 'Greeley Colorado USA') %>%
+  add_osm_feature(key = 'highway') %>%
+  osmdata_xml(file = 'OTP/Graphs/Default/Greeley_streets.osm')
+```
+
+I plotted features on a map with NAD83(HARN): Colorado North projection.
+
+```{r}
+CO_state_plane <- "+proj=lcc +lat_1=40.78333333333333 +lat_2=39.71666666666667 +lat_0=39.33333333333334 +lon_0=-105.5 +x_0=914401.8289 +y_0=304800.6096 +ellps=GRS80 +units=m +no_defs "
+
+greeley_street_features <- opq(bbox = 'Greeley Colorado USA') %>%
+  add_osm_feature(key = 'highway') %>%
+  osmdata_sf()
+
+greeley_streets <- greeley_street_features$osm_lines %>%
+ st_transform(crs = CO_state_plane)
+```
+
+I then got a called greeley_streets.osm. Below is a map that shows the streets of Greeley (and it looks like some of Windsor, the neighboring town).
+
+```{r}
+ggplot(greeley_streets) +
+  geom_sf() +
+  theme_map()
+```
+
+
+## Setting Up Open Trip Planner
+
+I then built a graph representing the street and transit networks. 
+
+```{r, message=FALSE, results='hide'}
+path_data <- file.path(getwd(), "OTP")
+path_otp <- paste(path_data, "otp.jar",sep = "/")
+otp_build_graph(otp = path_otp, dir = path_data, memory = 1024) 
+```
+
+Launching OTP took a very long time. 
+
+```{r, message=FALSE, results='hide'}
+otp_setup(otp = path_otp, dir = path_data, memory =1024)
+# Connect to opentripplanner
+otpcon <- otp_connect()
+```
+
+## Create Isochrones!
+
+I created isochrones to represent areas within a five-minute walk and a five-minute drive from each of the nine schools in my data set. 
+
+
+```{r, warning=FALSE}
+iso_5min_walk <- 
+  otp_isochrone(otpcon = otpcon, fromPlace = GRLY_schools, 
+                mode = "WALK", cutoffSec = 300) %>%
+  st_transform(crs = CO_state_plane) %>%
+  mutate(mode = "walk")
+iso_5min_drive <- 
+  otp_isochrone(otpcon = otpcon, fromPlace = GRLY_schools, 
+                mode = "CAR", cutoffSec = 300) %>%
+  st_transform(crs = CO_state_plane) %>%
+  mutate(mode = "drive")
+iso_all_modes <- rbind(iso_5min_drive, iso_5min_walk)
+otp_stop()
+```
+
+Now I can plot them on a map from OpenStreetMap as a basemap.
+
+```{r}
+right_side <- st_bbox(iso_all_modes)$xmax
+left_side  <- st_bbox(iso_all_modes)$xmin
+top_side <- st_bbox(iso_all_modes)$ymax
+bottom_side <- st_bbox(iso_all_modes)$ymin
+
+ggplot(iso_all_modes) +
+  annotation_map_tile(zoomin = 0, progress = "none") +
+  geom_sf(aes(fill = mode), alpha = 0.5) +
+  geom_sf(data = GRLY_schools) +
+  coord_sf(xlim = c(left_side, right_side), 
+           ylim = c(bottom_side, top_side), expand = FALSE) +
+  scale_fill_viridis_d(name = "Area that is reachable within 5 minutes",
+                       labels = c("By car", "By foot")) +
+  theme_map() +
+  labs(caption = "Basemap Copyright OpenStreetMap contributors")
+```
+
+## Figure 1: A map of the isochrones
+
+Although I experimented with a few different basemaps, the basic street network was my favorite because it didn't distract from the isochrones themselves. Most of these seem to be fair and representative of my city and its network, however the bottom-right most school is deceiving. There is a street network that continuos south of the school, but it doesn't take those streets into account. I wonder if there might be information for those streets that is missing, or if bb_box just clipped the map there.
+
+
+```{r}
+ggplot(iso_all_modes) +
+  geom_sf(data = greeley_streets, color = "gray") +
+  geom_sf(aes(fill = mode), alpha = 0.5) +
+  geom_sf(data = GRLY_schools) +
+  coord_sf(xlim = c(left_side, right_side), 
+           ylim = c(bottom_side, top_side), expand = FALSE) +
+  scale_fill_viridis_d(name = "Area that is reachable within 5 minutes",
+                       labels = c("By car", "By foot")) +
+  theme_map() +
+  theme(legend.position = "top")
+```
+
+## Figure 2: A comparison of areas
+
+The graph below compares the areas that are a five minute walk from each school to the areas that are a five minute drive to school. A greater area that is a 5 minute walk from school implies greater connectivity of the network, perhaps with more intersections. The same goes for driving. 
+
+```{r}
+iso_areas <- iso_all_modes %>%
+  mutate(area = st_area(iso_all_modes)) %>%
+  st_set_geometry(NULL) %>%
+  pivot_wider(names_from = mode, values_from = area) 
+
+ggplot(iso_areas, 
+       aes(x = as.numeric(walk), y = as.numeric(drive))) +
+  geom_point() +
+  scale_x_continuous(name = 
+            "Area within a five-minute walking distance\nof a public school\n(square km)",
+            breaks = breaks <- seq(10000, 200000, by = 20000),
+            labels = breaks / 1000000) +
+  scale_y_continuous(name = 
+            "Area within a five-minute driving distance\nof a public school\n(square km)",
+            breaks = breaks <- seq(0, 1400000, by = 100000),
+            labels = breaks / 1000000) +
+  theme_bw()
+```
+
+
+## Figure 3: Bar Chart
+
+Lastly, I was inspired by Aron Lesser's figure for this last chart. The figure below shows the areas within a five minute drive from school along the y-axis in square kilometers. Their fill color is determined by the area within a five-minute walk from the school in square kilometers. The darker the bar, the smaller the walking area is from each school. The lighter the bar, the greater the walking area is from the school. Brentwood Middle School has a huge driving distance, but has a very small walking area, relative to the other schools. Trinity Lutheran and Salida Del Sol have about average driving areas, but large walking areas, relative to the other schools. 
+
+```{r}
+iso_areas <- iso_all_modes %>%
+  mutate(area = st_area(iso_all_modes)) %>%
+  st_set_geometry(NULL) %>%
+  pivot_wider(names_from = mode, values_from = area) 
+
+ggplot(iso_areas,
+        aes(x = fromPlace, y = as.numeric(drive), fill = as.numeric(walk)/1000000))+
+geom_bar(stat = "identity", width = 0.5)+
+  scale_x_discrete(name = "Schools",
+                   labels = c("Winograd\nK-8\nSchool",
+                              "Trinity\nLutheran\nSchool",
+                              "Frontier\nAcademy",
+                              "Brentwood\nMiddle\nSchool",
+                              "Jackson\nElementary\nSchool",
+                              "Dos\nRios\nElementary\nSchool",
+                              "Chappelow\nArts\nMagnet\nK-8\nSchool",
+                              "Centennial\nElementary\nSchool",
+                              "Salida\nDel\nSol\nAcademy")) +
+  scale_y_continuous(name = "Area within a five-minute driving distance\nof a public school\n(square km)",
+                     breaks = breaks <- seq(0, 15000000, by = 250000),
+                     labels = breaks / 1000000) +
+  scale_fill_continuous(name = "Area within a\nfive-minute\ndriving distance\nof a public school\n(square km)")+
+  theme_minimal()
+```
+
+
+
+
+
+
