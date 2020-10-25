@@ -3,7 +3,10 @@ title: "Assignment 4"
 author: "Miguel Perez Luna"
 date: "10/3/2020"
 output:
-   html_document:
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+  html_document:
     theme: cosmo
     toc: yes
     toc_depth: 3

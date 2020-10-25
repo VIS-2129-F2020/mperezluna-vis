@@ -1,0 +1,60 @@
+---
+title: "Interactive Map"
+author: "Miguel Perez Luna"
+date: "10/25/2020"
+output: 
+  html_document:
+    theme: cosmo
+    toc: true
+    toc_depth: 3
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+library(tidyverse)
+library(sf)
+library(leaflet)
+library(htmltools)
+library(htmlwidgets)
+```
+
+First, I'll open a shapefile of polygons representing public parks in New Orleans, LA. I'll also convert acres to square meters. 
+
+```{r, message = FALSE, results='hide'}
+leaflet_plane <- "+proj=longlat +datum=WGS84"
+
+parks <- st_read("/Users/miguelperez-luna/Library/Mobile Documents/com~apple~CloudDocs/1. GSD/1. Semester One/VIS 2129/GitHub/mperezluna-vis/mperezluna-vis/Parks_-_Polygon-shp") %>%
+  mutate(acres = as.numeric(st_area(geometry))/4046.86) %>%
+  st_transform(crs = leaflet_plane)
+  
+```
+
+
+
+
+Displaying on a Leaflet map
+
+```{r}
+parks$describe <- paste(parks$NAME, "<br>",
+                        prettyNum(parks$acres, digits = 2), "acres", "<br>",
+                        parks$STREET, "<br>",
+                        parks$NEGIHBORHO) %>%
+  lapply(htmltools::HTML)
+
+parks_map1 <- leaflet(parks) %>%
+  addProviderTiles(providers$Stamen) %>%
+  addPolygons(fillColor = "green", stroke = FALSE,
+              highlightOptions = highlightOptions(fillColor = "yellow",
+                                                  fillOpacity = 1),
+              label = ~describe) %>%
+  addControl("Park Locations in New Orleans", position = "topright") %>%
+  addControl('<a href="https://portal-nolagis.opendata.arcgis.com/datasets/parks-polygon?page=15">Data source</a>',
+             position = "bottomleft")
+
+parks_map1
+```
+
