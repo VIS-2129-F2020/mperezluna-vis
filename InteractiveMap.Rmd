@@ -58,3 +58,12 @@ parks_map1 <- leaflet(parks) %>%
 parks_map1
 ```
 
+```{r}
+saveWidget(parks_map1, file = "NOLAparks.html")
+```
+
+
+The link to the above widget is: 
+https://vis-2129-f2020.github.io/mperezluna-vis/NOLAparks.html
+
+
