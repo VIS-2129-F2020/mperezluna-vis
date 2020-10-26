@@ -28,7 +28,7 @@ First, I'll open a shapefile of polygons representing public parks in New Orlean
 leaflet_plane <- "+proj=longlat +datum=WGS84"
 
 parks <- st_read("/Users/miguelperez-luna/Library/Mobile Documents/com~apple~CloudDocs/1. GSD/1. Semester One/VIS 2129/GitHub/mperezluna-vis/mperezluna-vis/Parks_-_Polygon-shp") %>%
-  mutate(acres = as.numeric(st_area(geometry))/4046.86) %>%
+  mutate(acres = as.numeric(st_area(geometry))/43560) %>%
   st_transform(crs = leaflet_plane)
   
 ```
@@ -46,7 +46,7 @@ parks$describe <- paste(parks$NAME, "<br>",
   lapply(htmltools::HTML)
 
 parks_map1 <- leaflet(parks) %>%
-  addProviderTiles(providers$Stamen) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
   addPolygons(fillColor = "green", stroke = FALSE,
               highlightOptions = highlightOptions(fillColor = "yellow",
                                                   fillOpacity = 1),
