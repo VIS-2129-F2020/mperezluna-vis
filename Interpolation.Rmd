@@ -1,0 +1,185 @@
+---
+title: "Registered Democrats in New Orleans, LA"
+author: "Miguel Perez Luna"
+date: "11/5/2020"
+output: 
+  html_document:
+    theme: cosmo
+    toc: true
+    toc_depth: 3
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, message=FALSE}
+library(tidyverse)
+library(sf)
+library(leaflet)
+library(htmltools)
+library(htmlwidgets)
+library(raster)
+library(gstat)
+library(spatial)
+```
+
+## Creation of Dataset
+
+I am curious at looking at the spread of registered democrats in the City of New Orleans, Louisiana. I found a shapefile on New Orlean's open data portal that contains the voting precincts in New Orleans, as well as information about voter registration within each precinct. The data is current as of October 2020. 
+
+When creating my dataset, I chose the following variables:
+
+- Voting Precinct (VotingPR_1)
+
+- Total Registered Voters (Register_3)
+
+- Total Registered Democrats (Register_7)
+
+Since total populations vary by precinct, I decided to create a new variable called pct_dem that calculates the percentage of registered voters in each precinct that registered as democrats. This is a better way to compare the density of registered democrats across precincts.
+
+## Visualizing Voting Precincts in New Orleans
+
+The below map shows the voting precincts in New Orleans. 
+```{r}
+leaflet_plane <- "+proj=longlat +datum=WGS84"
+
+NOLA_precincts <- st_read("/Users/miguelperez-luna/Library/Mobile Documents/com~apple~CloudDocs/1. GSD/1. Semester One/VIS 2129/GitHub/mperezluna-vis/mperezluna-vis/Voting_Precincts-shp", quiet = TRUE) %>%
+  dplyr::select(VotingPr_1, Register_7, Register_3) %>%
+  filter(Register_7 > 1) %>%
+  mutate(pct_dem = (Register_7 / Register_3) * 100) %>%
+  st_transform(crs = leaflet_plane)
+
+leaflet(NOLA_precincts) %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addPolygons(highlightOptions = highlightOptions(fillColor = "yellow", 
+                                                  fillOpacity = 1),
+              label = ~VotingPr_1, 
+              weight = 1)
+```
+
+## Visualizing Differences Among Neighborhoods
+
+Using a chloropleth map, we can start to see differences in the make up of voters in each precinct. You can generally see that there are precincts with higher percentages of registered democrats clustered near the center of the city. 
+
+Looking at one intersection, however, we can notice sudden changes in the percentage of registered democrats. The four precincts abutting the intersection of Jefferson Avenue and South Clairborne Avenue go from 38%, to 44%, to 61%, to 65% of registered voters who registered as democrats. While there are certainly differences in democrat populations between these precincts, it's likely that the spread of registered democrats doesn't change so sharply once you cross the street. It's more likely that the spread varies more gradually between precincts. 
+
+Thank you to Jessica Tang for helping me with the round function, which helped me show the percentages as integers.
+
+
+```{r}
+NOLA_precincts$label <- 
+  paste("Precinct",
+        NOLA_precincts$VotingPr_1, "<br>", 
+        round(NOLA_precincts$pct_dem, 0), "% Democrat") %>% 
+  lapply(htmltools::HTML)
+
+bins <- seq(min(NOLA_precincts$pct_dem),
+            max(NOLA_precincts$pct_dem), by = 1)
+pal <- colorNumeric("viridis", 
+                    domain = NOLA_precincts$pct_dem,
+                    na.color = "#00000000")
+
+leaflet(NOLA_precincts) %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addPolygons(highlightOptions = highlightOptions(fillOpacity = 1),
+              label = ~label,
+              fillColor = ~pal(pct_dem),
+              weight = 1, color = "black") %>% 
+  addLegend(pal = pal, 
+            values = ~pct_dem,
+            bins = 3,
+            opacity = 0.7, title = "% of Registered<br>Voters as Democrat",
+            position = "topright")
+```
+
+
+## Registered Democrats as Points 
+
+We can represent the percent of voters per precinct registered as democrats as points at the center of each precinct instead. 
+
+The idea behind this representation is that the percentage of voters registered as democrats is most true for a precinct at its center, and then as one moves away from the center, the percentage of democrats starts to look like the neighboring precincts.
+
+```{r, warning = FALSE}
+LA_state_plane <- "+proj=lcc +lat_1=32.66666666666666 +lat_2=31.16666666666667 +lat_0=30.5 +lon_0=-92.5 +x_0=1000000 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs "
+
+WGS84 <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+
+precinct_points <- st_centroid(
+  st_transform(NOLA_precincts, crs = LA_state_plane)) %>%
+  st_transform(WGS84)
+
+leaflet(precinct_points) %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addCircles(label = ~label,
+             fillColor = ~pal(pct_dem),
+             stroke = FALSE, 
+             radius = 50, 
+             fillOpacity = 1) %>% 
+  addLegend(pal = pal, 
+            values = ~pct_dem,
+            bins = 3,
+            opacity = 0.7, title = "% of Registered<br>Voters as Democrat",
+            position = "topright")
+```
+
+
+## Interpolation
+
+We can guess what the spread of democrats looks like between these points using raster interpolation.
+
+First I'll make sure that my precinct points and polygons are in the same coordinate system, WGS84.
+
+```{r, warning=FALSE}
+precinct_pts_sp <- precinct_points %>%
+  st_transform(LA_state_plane) %>%
+  as_Spatial()
+
+precinct_poly_sp <- NOLA_precincts %>%
+  st_transform(LA_state_plane) %>%
+  as_Spatial()
+```
+
+Next, I'll create an empty raster that covers the area of New Orleans. Each cell will represent 10 meters.
+
+```{r}
+NOLA_raster <- raster(precinct_poly_sp, res=10)
+```
+
+Now I'll create a raster that shows the variation in density of registered democrats using the inverse-distance weighting method. 
+
+```{r, warning=FALSE, message=FALSE, results='hide'}
+gs <- gstat(formula=pct_dem~1, locations=precinct_pts_sp)
+idw_interp <- interpolate(NOLA_raster, gs)
+
+idw_interp_clip <- mask(idw_interp, precinct_poly_sp)
+```
+
+Last, we can show this raster interpolation on a map. 
+
+```{r, warning=FALSE}
+leaflet(precinct_points) %>%
+  addProviderTiles(providers$Stamen.TonerLite) %>%
+  addRasterImage(idw_interp_clip, colors = pal, opacity = 0.8) %>% 
+  addLegend(pal = pal, 
+            values = ~pct_dem,
+            bins = 3,
+            opacity = 0.7, title = "% of Registered<br>Voters as Democrat",
+            position = "topright")
+```
+
+## Discussion 
+
+The three maps represent the same information in different ways and therefore convey the information with in both clearer and sometimes misleading ways. 
+
+First, the most informative map is the chloropleth map. It's the most informative because you can determine both the name of the precinct (in this case they are actually hyphenated numbers), the percentage of voters who are registered as democrats, and the geographical boundaries of each precinct. It's helpful to know where a precinct starts and ends because it helps draw further conclusions about voting patterns when considering other data (that is not part of this project) such as race, median income, median home value, etc, of a geographical area. 
+
+However, this map is misleading because upon first glimpse it looks like half of the city is solidly non-democrat. Precincts 9-45 and 9-45a, which make up the eastern half of New Orleans' land area are only 35% and 25% democrat, respectively. However, those voting precincts only have 500 and 79 total registered voters to begin with, so in reality the number of non-democrat voters is quite on par with some of the smaller precincts (area-wise).
+
+The point map erases the geographical information of the precincts and just offers a general idea of the spatial distribution of voters. It's still quite easy to see the density of registered democrats across different parts of the city. 
+
+The interpolated map is the most interesting, the most appropriate for the data, and also the best. It's the most interesting because it offers a blend of both the chloropleth and point maps. While the geographical boundaries are also erased in the interpolated map, you can still see the relationship between the centroid points of each precinct, as well as the change in color gradient between centroids, which suggests potential geographical boundaries of the precincts. In many ways, I think this is more likely to reflect the actual distribution of registered democrats, as the geographical boundaries in the chloropleth might not represent the actual spread of registered democrats. 
+
+This map is also appropriate for this data because it addresses the misleading nature of the chloropleth map. In Precincts 9-45 and 9-45a, you do see dark purple circles, which indicate a strong non-democrat presence, but by most of the actual precinct itself is not purple. This allows the viewer to understand that there might be slight concentrations of non-democrats in these precincts but that the density of non-democrats is more fluidly between a low and high density. The interpolated map is the best map to convey the distribution of registered democrats in the city of New Orleans. 
