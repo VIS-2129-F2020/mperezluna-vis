@@ -46,12 +46,12 @@ parks$describe <- paste(parks$NAME, "<br>",
   lapply(htmltools::HTML)
 
 parks_map1 <- leaflet(parks) %>%
-  addProviderTiles(providers$CartoDB.Positron) %>%
-  addPolygons(fillColor = "green", stroke = FALSE,
+  addProviderTiles(providers$Stamen) %>%
+  addPolygons(fillColor = "darkgreen", stroke = FALSE,
               highlightOptions = highlightOptions(fillColor = "yellow",
                                                   fillOpacity = 1),
               label = ~describe) %>%
-  addControl("Park Locations in New Orleans", position = "topright") %>%
+  addControl("Public Park Locations in New Orleans", position = "topright") %>%
   addControl('<a href="https://portal-nolagis.opendata.arcgis.com/datasets/parks-polygon?page=15">Data source</a>',
              position = "bottomleft")
 

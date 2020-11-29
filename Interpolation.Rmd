@@ -160,14 +160,16 @@ idw_interp_clip <- mask(idw_interp, precinct_poly_sp)
 Last, we can show this raster interpolation on a map. 
 
 ```{r, warning=FALSE}
-leaflet(precinct_points) %>%
-  addProviderTiles(providers$Stamen.TonerLite) %>%
-  addRasterImage(idw_interp_clip, colors = pal, opacity = 0.8) %>% 
-  addLegend(pal = pal, 
-            values = ~pct_dem,
-            bins = 3,
-            opacity = 0.7, title = "% of Registered<br>Voters as Democrat",
-            position = "topright")
+voting_map <- leaflet(precinct_points) %>%
+              addProviderTiles(providers$Stamen.TonerLite) %>%
+              addRasterImage(idw_interp_clip, colors = pal, opacity = 0.8) %>% 
+              addLegend(pal = pal, 
+                values = ~pct_dem,
+                 bins = 3,
+                 opacity = 0.7, title = "% of Registered<br>Voters as Democrat",
+                 position = "topright")
+
+voting_map
 ```
 
 ## Discussion 
@@ -183,3 +185,9 @@ The point map erases the geographical information of the precincts and just offe
 The interpolated map is the most interesting, the most appropriate for the data, and also the best. It's the most interesting because it offers a blend of both the chloropleth and point maps. While the geographical boundaries are also erased in the interpolated map, you can still see the relationship between the centroid points of each precinct, as well as the change in color gradient between centroids, which suggests potential geographical boundaries of the precincts. In many ways, I think this is more likely to reflect the actual distribution of registered democrats, as the geographical boundaries in the chloropleth might not represent the actual spread of registered democrats. 
 
 This map is also appropriate for this data because it addresses the misleading nature of the chloropleth map. In Precincts 9-45 and 9-45a, you do see dark purple circles, which indicate a strong non-democrat presence, but by most of the actual precinct itself is not purple. This allows the viewer to understand that there might be slight concentrations of non-democrats in these precincts but that the density of non-democrats is more fluidly between a low and high density. The interpolated map is the best map to convey the distribution of registered democrats in the city of New Orleans. 
+
+```{r}
+saveWidget(voting_map, file = "NOLAvoting.html")
+```
+
+https://vis-2129-f2020.github.io/mperezluna-vis/NOLAvoting.html

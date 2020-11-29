@@ -409,6 +409,7 @@ theme_map() +
 My last two maps compare the densities of after school programs and liquor licenses per neighborhood. 
 
 ```{r}
+pdf("after_school.pdf", width=6, height=4)
 nhoods <- nhoods %>%
   mutate(num_afterschool = lengths(st_covers(nhoods, afterschool)))
 
@@ -431,6 +432,7 @@ theme_map() +
   theme(legend.position = "right",
     legend.background = element_rect(fill = alpha("white", 0.5), 
                                          color = "gray"))
+dev.off()
 ```
 
 ## Density of liquor licenses by Denver neighborhood

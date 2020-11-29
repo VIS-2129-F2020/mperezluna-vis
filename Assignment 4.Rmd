@@ -132,6 +132,7 @@ Although I experimented with a few different basemaps, the basic street network 
 
 
 ```{r}
+pdf("isochrones.pdf", width=6, height=4)
 ggplot(iso_all_modes) +
   geom_sf(data = greeley_streets, color = "gray") +
   geom_sf(aes(fill = mode), alpha = 0.5) +
@@ -142,6 +143,7 @@ ggplot(iso_all_modes) +
                        labels = c("By car", "By foot")) +
   theme_map() +
   theme(legend.position = "top")
+dev.off()
 ```
 
 ## Figure 2: A comparison of areas

@@ -71,6 +71,7 @@ select(GEOID, maj_ten, majority_race, tot_pop, med_age, pct_hh_children, pct_sin
 
 
 ```{r}
+
 ggplot(Noco_tracts, aes(x = majority_race, fill = maj_ten)) +
   geom_bar(position = "fill") +
   scale_y_continuous(name = "Percent of Tracts",
@@ -84,10 +85,12 @@ ggplot(Noco_tracts, aes(x = majority_race, fill = maj_ten)) +
                         labels = c("Majority of households owned",
                                    "Majority of households rented")) +
   theme_bw()
+
 ```
 
 
 ```{r}
+pdf("race_singleMothers.pdf")
 ggplot(Noco_tracts, 
        aes(x = majority_race,
            y = pct_sing_fe_hh_ch,
@@ -101,10 +104,11 @@ ggplot(Noco_tracts,
                      breaks = seq(0, 1, by = 0.05),
                      labels = paste(seq(0, 100, by = 5), "%", sep = "")) +
   geom_point(position = "jitter",
-             size = 0.5,
+             size = 3,
              alpha = 1) +  
   theme_bw() +
   theme(legend.position = "none")
+dev.off()
 ```
 
 
