@@ -161,7 +161,7 @@ Last, we can show this raster interpolation on a map.
 
 ```{r, warning=FALSE}
 voting_map <- leaflet(precinct_points) %>%
-              addProviderTiles(providers$Stamen.TonerLite) %>%
+              addProviderTiles(providers$Stamen) %>%
               addRasterImage(idw_interp_clip, colors = pal, opacity = 0.8) %>% 
               addLegend(pal = pal, 
                 values = ~pct_dem,
